@@ -22,7 +22,7 @@ import hashlib
 from collections import namedtuple
 from collections import OrderedDict
 from threading import Thread
-
+from .udp_tools import PacketTools
 
 # Set logging
 logging.basicConfig(level=logging.DEBUG,
@@ -260,6 +260,7 @@ class PacketHandler(Thread):
         self.timeout = timeout
         self.packetLossProbability = packetLossProbability
         self.bufferSize = bufferSize
+        self.packet_tools = PacketTools()
 
     def run(self):
         """
@@ -389,26 +390,7 @@ class PacketHandler(Thread):
             return False
 
     def checksum(self, data):
-        """
-        Compute and return a checksum of the given payload data
-        """
-        # Force payload data into 16 bit chunks
-        if (len(data) % 2) != 0:
-            data += "0"
-
-        sum = 0
-        for i in range(0, len(data), 2):
-            data16 = ord(data[i]) + (ord(data[i+1]) << 8)
-            sum = self.carry_around_add(sum, data16)
-
-        return ~sum & 0xffff
-
-    def carry_around_add(self, sum, data16):
-        """
-        Helper function for carry around add.
-        """
-        sum = sum + data16
-        return (sum & 0xffff) + (sum >> 16)
+        return self.packet_tools.checksum(data)
 
     def rdt_send(self, ackNumber):
         """
