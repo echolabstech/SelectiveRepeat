@@ -206,14 +206,13 @@ class Window(object):
         packet = None
 
         if len(self.receiptWindow) > 0:
-            nextPkt = self.receiptWindow.items()[0]
+            nextPkt = self.receiptWindow.popitem(0)
 
-            if nextPkt[1] != None:
+            if nextPkt != None:
                 packet = nextPkt[1]
+                sequenceNumber = nextPkt[0]
 
-                del self.receiptWindow[nextPkt[0]]
-
-                self.expectedPkt = nextPkt[0] + 1
+                self.expectedPkt = sequenceNumber + 1
                 if self.expectedPkt >= self.maxSequenceSpace:
                     self.expectedPkt %= self.maxSequenceSpace
 
@@ -260,7 +259,6 @@ class PacketHandler(Thread):
         self.timeout = timeout
         self.packetLossProbability = packetLossProbability
         self.bufferSize = bufferSize
-        self.packet_tools = PacketTools()
 
     def run(self):
         """
@@ -329,13 +327,6 @@ class PacketHandler(Thread):
 
                 continue
 
-            # Simulate artificial packet loss
-            if self.simulate_packet_loss():
-                log.error("Simulating artificial packet loss!!")
-                log.error("Lost a packet with sequence number: %d",
-                          receivedPacket.SequenceNumber)
-                continue
-
             # If received packet is duplicate, then discard it
             if self.window.exist(receivedPacket.SequenceNumber):
                 log.warning("Received duplicate packet!!")
@@ -390,7 +381,7 @@ class PacketHandler(Thread):
             return False
 
     def checksum(self, data):
-        return self.packet_tools.checksum(data)
+        return PacketTools.checksum(data)
 
     def rdt_send(self, ackNumber):
         """
@@ -409,8 +400,12 @@ class PacketHandler(Thread):
         """
         Compute the hash code.
         """
+        if isinstance(data, int):
+            data = str(data)
+        if isinstance(data, str):
+            data = data.encode()
         hashcode = hashlib.md5()
-        hashcode.update(str(data))
+        hashcode.update(data)
         return hashcode.digest()
 
     def make_pkt(self, ack):
