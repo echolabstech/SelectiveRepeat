@@ -24,7 +24,8 @@ from collections import namedtuple
 from collections import OrderedDict
 from threading import Thread
 from threading import Lock
-
+from .udp_tools import PacketTools
+from copy import deepcopy
 
 # Set logging
 logging.basicConfig(level=logging.DEBUG,
@@ -218,16 +219,19 @@ class Window(object):
             self.transmissionWindow[key][0] = None
 
         if key == self.expectedAck:
+            updated_transmission_window = deepcopy(self.transmissionWindow)
             for k, v in self.transmissionWindow.items():
                 if v[0] == None and v[1] == True:
-                    del self.transmissionWindow[k]
+                    del updated_transmission_window[k]
                 else:
                     break
 
-            if len(self.transmissionWindow) == 0:
+            if len(updated_transmission_window) == 0:
                 self.expectedAck = self.nextSequenceNumber
             else:
-                self.expectedAck = self.transmissionWindow.items()[0][0]
+                expectedAck = list(updated_transmission_window.keys())[0]
+                self.expectedAck = expectedAck
+            self.transmissionWindow = deepcopy(updated_transmission_window)
 
     def start_time(self, key):
         return self.transmissionWindow[key][0]
@@ -286,6 +290,7 @@ class PacketHandler(Thread):
         self.bitErrorProbability = bitErrorProbability
         self.threadName = threadName
         self.bufferSize = bufferSize
+        self.packet_tools = PacketTools()
 
     def run(self):
         """
@@ -379,27 +384,7 @@ class PacketHandler(Thread):
         return packets[:self.totalPackets]
 
     def checksum(self, data):
-        """
-        Compute and return a checksum of the given payload data.
-        """
-        # Force payload data into 16 bit chunks
-        if (len(data) % 2) != 0:
-            data += "0"
-
-        sum = 0
-        for i in range(0, len(data), 2):
-            data16 = ord(data[i]) + (ord(data[i+1]) << 8)
-            sum = self.carry_around_add(sum, data16)
-
-        return ~sum & 0xffff
-
-    def carry_around_add(self, sum, data16):
-        """
-        Helper function for carry around add.
-        """
-        sum = sum + data16
-        return (sum & 0xffff) + (sum >> 16)
-
+        return self.packet_tools.checksum(data)
 
 class SinglePacket(Thread):
     """
@@ -457,13 +442,6 @@ class SinglePacket(Thread):
         """
         Reliable data transfer.
         """
-        # Simulate artificial bit error
-        if self.simulate_bit_error():
-            log.error("[%s] Simulating artificial bit error!!",
-                      self.threadName)
-            log.error("[%s] Injected bit error into a packet with sequence number: %d",
-                      self.threadName, packet.SequenceNumber)
-            packet = self.alter_bits(packet)
 
         # Create a raw packet
         rawPacket = self.make_pkt(packet)
@@ -610,14 +588,6 @@ class ACKHandler(Thread):
                             self.threadName, receivedAck.AckNumber)
                 continue
 
-            # Simulate artificial acknowledgement loss
-            if self.simulate_ack_loss():
-                log.error("[%s] Simulating artificial acknowledgement loss!!",
-                          self.threadName)
-                log.error("[%s] Lost a acknowledgement with ack number: %d",
-                          self.threadName, receivedAck.AckNumber)
-                continue
-
             # Mark transmitted packet as acked
             # for the corresponding received acknowledgement
             log.info("[%s] Received acknowledgement with ack number: %d",
@@ -642,11 +612,18 @@ class ACKHandler(Thread):
         """
         # Compute hash code for the received acknowledgement
         hashcode = hashlib.md5()
-        hashcode.update(str(receivedAck.AckNumber))
+        updatedAck = PacketTools.update_Ack(receivedAck)
+        if isinstance(updatedAck.AckNumber, int):
+            updatedAck = PacketTools.update_Ack(updatedAck, 
+                                                ack_number=str(updatedAck.AckNumber))
+        if isinstance(updatedAck.AckNumber, str):
+            updatedAck = PacketTools.update_Ack(updatedAck, 
+                                                ack_number=updatedAck.AckNumber.encode())
+        hashcode.update(updatedAck.AckNumber)
 
         # Compare computed hash code
         # with the checksum of received acknowledgement
-        if hashcode.digest() != receivedAck.Checksum:
+        if hashcode.digest() != updatedAck.Checksum:
             return True
         else:
             return False

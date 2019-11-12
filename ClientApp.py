@@ -1,16 +1,3 @@
-#!/usr/bin/python
-"""""
-@File:           ClientApp.py
-@Description:    Client Application running Selective Repeat protocol
-                 for reliable data transfer.
-@Author:         Chetan Borse
-@EMail:          chetanborse2106@gmail.com
-@Created_on:     03/23/2017
-@License         GNU General Public License
-@python_version: 2.7
-===============================================================================
-"""
-
 import os
 import argparse
 

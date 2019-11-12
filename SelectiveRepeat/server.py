@@ -22,7 +22,7 @@ import hashlib
 from collections import namedtuple
 from collections import OrderedDict
 from threading import Thread
-
+from .udp_tools import PacketTools
 
 # Set logging
 logging.basicConfig(level=logging.DEBUG,
@@ -206,14 +206,13 @@ class Window(object):
         packet = None
 
         if len(self.receiptWindow) > 0:
-            nextPkt = self.receiptWindow.items()[0]
+            nextPkt = self.receiptWindow.popitem(0)
 
-            if nextPkt[1] != None:
+            if nextPkt != None:
                 packet = nextPkt[1]
+                sequenceNumber = nextPkt[0]
 
-                del self.receiptWindow[nextPkt[0]]
-
-                self.expectedPkt = nextPkt[0] + 1
+                self.expectedPkt = sequenceNumber + 1
                 if self.expectedPkt >= self.maxSequenceSpace:
                     self.expectedPkt %= self.maxSequenceSpace
 
@@ -328,13 +327,6 @@ class PacketHandler(Thread):
 
                 continue
 
-            # Simulate artificial packet loss
-            if self.simulate_packet_loss():
-                log.error("Simulating artificial packet loss!!")
-                log.error("Lost a packet with sequence number: %d",
-                          receivedPacket.SequenceNumber)
-                continue
-
             # If received packet is duplicate, then discard it
             if self.window.exist(receivedPacket.SequenceNumber):
                 log.warning("Received duplicate packet!!")
@@ -389,26 +381,7 @@ class PacketHandler(Thread):
             return False
 
     def checksum(self, data):
-        """
-        Compute and return a checksum of the given payload data
-        """
-        # Force payload data into 16 bit chunks
-        if (len(data) % 2) != 0:
-            data += "0"
-
-        sum = 0
-        for i in range(0, len(data), 2):
-            data16 = ord(data[i]) + (ord(data[i+1]) << 8)
-            sum = self.carry_around_add(sum, data16)
-
-        return ~sum & 0xffff
-
-    def carry_around_add(self, sum, data16):
-        """
-        Helper function for carry around add.
-        """
-        sum = sum + data16
-        return (sum & 0xffff) + (sum >> 16)
+        return PacketTools.checksum(data)
 
     def rdt_send(self, ackNumber):
         """
@@ -427,8 +400,12 @@ class PacketHandler(Thread):
         """
         Compute the hash code.
         """
+        if isinstance(data, int):
+            data = str(data)
+        if isinstance(data, str):
+            data = data.encode()
         hashcode = hashlib.md5()
-        hashcode.update(str(data))
+        hashcode.update(data)
         return hashcode.digest()
 
     def make_pkt(self, ack):
