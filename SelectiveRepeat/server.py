@@ -16,6 +16,7 @@ import math
 import logging
 import random
 import socket
+from SelectiveRepeat.TCP_over_UDP.TCP_over_UDP import TCP
 import struct
 import select
 import hashlib
@@ -67,7 +68,8 @@ class Receiver(object):
                  self.receiverIP, self.receiverPort)
 
         try:
-            self.receiverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # self.receiverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.receiverSocket = TCP()
             self.receiverSocket.bind((self.receiverIP, self.receiverPort))
             self.receiverSocket.setblocking(0)
         except Exception as e:
