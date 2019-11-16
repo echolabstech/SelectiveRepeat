@@ -5,6 +5,10 @@ import pickle
 import threading
 import time
 from PyCRC.CRC16 import CRC16
+import logging
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s TCP_OVER_UDP [%(levelname)s] %(message)s',)
+log = logging.getLogger()
 
 DATA_DIVIDE_LENGTH = 1024
 TCP_PACKET_SIZE = 32
@@ -97,19 +101,19 @@ class TCPPacket(object):
 
 class TCP(object):
 
-    def __init__(self, timeout=5):
+    def __init__(self, timeout=5, receiverIP="127.0.0.1", receiverPort=8080, blocking=0):
         self.status = 1  # socket open or closed
         #seq will have the last packet send and ack will have the next packet waiting to receive
         self.own_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP socket used for communication.
         self.own_socket.settimeout(timeout)
+        self.own_socket.bind((receiverIP, receiverPort))
+        self.own_socket.setblocking(blocking)
         self.connections = {}
         self.connection_queue = []
         self.connection_lock = threading.Lock()
         self.queue_lock = threading.Lock()
         # each condition will have a dictionary of an address and it's corresponding packet.
         self.packets_received = {"SYN": {}, "ACK": {}, "SYN-ACK": {}, "DATA or FIN": {}, "FIN-ACK": {}}
-
-        self.central_receive()
 
     def __repr__(self):
         return "TCP()"
@@ -140,11 +144,11 @@ class TCP(object):
                         answer = self.find_correct_packet("ACK", connection)
 
                     except socket.timeout:
-                        print "timeout"
+                        print("timeout")
                         data_not_received = True
                 self.connections[connection].seq += len(data_part)
         except socket.error as error:
-            print "Socket was closed before executing command. Error is: %s." % error
+            print("Socket was closed before executing command. Error is: %s." % error)
 
     def recv(self, connection=None):
         try:
@@ -160,7 +164,7 @@ class TCP(object):
 
                 data_part = self.find_correct_packet("DATA or FIN", connection)
                 if not self.status:
-                    print "I am disconnectiong cause sock is dead"
+                    print("I am disconnectiong cause sock is dead")
                     return "Disconnected"
                 if data_part.packet_type() == "FIN":
                     self.disconnect(connection)
@@ -186,7 +190,7 @@ class TCP(object):
 
             return data
         except socket.error as error:
-            print "Socket was closed before executing command. Error is: %s." % error
+            print("Socket was closed before executing command. Error is: %s." % error)
 
     # conditions = ["SYN", "SYN-ACK", "ACK", "FIN", "FIN-ACK", "DATA"]
     def listen_handler(self, max_connections):
@@ -203,7 +207,7 @@ class TCP(object):
                 except KeyError:
                     continue
         except socket.error as error:
-            print "Something went wrong in listen_handler func! Error is: %s." + str(error)
+            print("Something went wrong in listen_handler func! Error is: %s." + str(error))
 
     def listen(self, max_connections=1):
         try:
@@ -211,7 +215,7 @@ class TCP(object):
             t.daemon = True
             t.start()
         except Exception as error:
-            print "Something went wrong in listen func! Error is: %s." % str(error)
+            print("Something went wrong in listen func! Error is: %s." % str(error))
 
     def accept(self):
         try:
@@ -238,7 +242,7 @@ class TCP(object):
                     self.connections[address].ack = answer.seq + 1
                     return address
         except Exception as error:
-            print "Something went wrong in accept func: " + str(error)
+            print("Something went wrong in accept func: " + str(error))
             self.own_socket.close()
 
     def connect(self, server_address=("127.0.0.1", 10000)):
@@ -259,7 +263,7 @@ class TCP(object):
             self.connections[server_address].set_flags()
 
         except socket.error as error:
-            print "Something went wrong in connect func: " + str(error)
+            print("Something went wrong in connect func: " + str(error))
             self.own_socket.close()
             raise Exception("The socket was closed")
 
@@ -292,7 +296,7 @@ class TCP(object):
                     self.own_socket.close()
                     self.status = 0
         except Exception as error:
-            print "Something went wrong in the close func! Error is: %s." % error
+            print("Something went wrong in the close func! Error is: %s." % error)
             
     def disconnect(self, connection):
         try:
@@ -309,7 +313,7 @@ class TCP(object):
             with self.connection_lock:
                 self.connections.pop(connection)
         except Exception as error:
-            print "Something went wrong in disconnect func:%s " % error
+            print("Something went wrong in disconnect func:%s " % error)
 
     @staticmethod
     def data_divider(data):
@@ -344,7 +348,7 @@ class TCP(object):
         if packet.packet_type() == "DATA" or packet.packet_type() == "FIN":
             self.packets_received["DATA or FIN"][address] = packet
         elif packet.packet_type() == "":
-            print "redundant packet found", packet
+            print("redundant packet found", packet)
         else:
             self.packets_received[packet.packet_type()][address] = packet
 
@@ -359,9 +363,12 @@ class TCP(object):
             except socket.error as error:
                 self.own_socket.close()
                 self.status = 0
-                print "An error has occured: Socket error %s" % error
+                print("An error has occured: Socket error %s" % error)
 
     def central_receive(self):
         t = threading.Thread(target=self.central_receive_handler)
         t.daemon = True
         t.start()
+
+    def fileno(self):
+        return self.own_socket.fileno()

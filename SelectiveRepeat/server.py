@@ -16,7 +16,7 @@ import math
 import logging
 import random
 import socket
-from SelectiveRepeat.TCP_over_UDP.TCP_over_UDP import TCP
+from SelectiveRepeat.TCP_over_UDP import TCP
 import struct
 import select
 import hashlib
