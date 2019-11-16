@@ -68,10 +68,8 @@ class Receiver(object):
                  self.receiverIP, self.receiverPort)
 
         try:
-            # self.receiverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.receiverSocket = TCP()
-            self.receiverSocket.bind((self.receiverIP, self.receiverPort))
-            self.receiverSocket.setblocking(0)
+            self.receiverSocket = TCP(receiverIP=self.receiverIP,
+                                      receiverPort=self.receiverPort)
         except Exception as e:
             log.error("Could not create UDP socket for communication with the client!")
             log.debug(e)
